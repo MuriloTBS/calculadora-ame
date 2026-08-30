@@ -20,8 +20,12 @@ Sem dependências de runtime — só a biblioteca padrão. `pytest` apenas para 
 
 `index.html` — página única, sem build, com a mesma lógica do motor Python
 portada para JavaScript (conferida número a número). Abra no navegador ou publique
-como página estática. Todos os parâmetros editáveis, 5 quadros de saída, Curva S e
-tema claro/escuro.
+como página estática.
+
+- Campos de identificação: cliente, obra / empreendimento e endereço da obra
+- Todos os parâmetros de cálculo editáveis, 5 quadros de saída, Curva S, tema claro/escuro
+- **Imprimir relatório** (`Ctrl/Cmd+P` ou o botão): gera folha com cabeçalho
+  identificado, quadros e o cronograma físico-financeiro de desembolso mês a mês
 
 ## Uso rápido
 

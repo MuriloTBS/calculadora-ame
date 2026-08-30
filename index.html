@@ -175,6 +175,52 @@
   @media (prefers-reduced-motion: reduce){
     *{ animation:none !important; transition:none !important; }
   }
+
+  .inwrap input[type="text"]{ text-align:left; font-family:var(--sans); }
+
+  /* ---------- cabeçalho e impressão do relatório ---------- */
+  .print-only{ display:none; }
+  .report-head{ break-inside:avoid; }
+  .rh-title{ display:flex; justify-content:space-between; align-items:baseline; gap:1rem;
+    border-bottom:2px solid var(--ink); padding-bottom:.3rem; margin-bottom:.55rem; }
+  .rh-title h2{ font-size:.95rem; text-transform:uppercase; letter-spacing:.08em; }
+  .rh-title span{ font-family:var(--mono); font-size:.72rem; color:var(--ink-soft); }
+  .rh-grid{ display:grid; grid-template-columns:max-content 1fr; gap:.18rem .9rem; margin:0 0 .6rem; font-size:.78rem; }
+  .rh-grid dt{ text-transform:uppercase; letter-spacing:.05em; font-size:.63rem; color:var(--ink-soft); align-self:center; }
+  .rh-grid dd{ margin:0; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .rh-total{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem 1rem; border:1px solid var(--ink); padding:.45rem .75rem; break-inside:avoid; }
+  .rh-total > span:first-child{ width:100%; text-transform:uppercase; letter-spacing:.06em; font-size:.63rem; color:var(--ink-soft); }
+  .rh-total b{ font-family:var(--mono); font-size:1.2rem; }
+  .rh-total > span:last-child{ font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); }
+
+  @media print{
+    @page{ margin:14mm; }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    :root{
+      --paper:#fff; --surface:#fff; --sunken:#f1f1f1; --ink:#000; --ink-soft:#333; --ink-faint:#555;
+      --line:#bcbcbc; --line-strong:#777; --accent:#000; --accent-soft:#e9e9e9;
+      --warn:#000; --warn-soft:#ededed; --good:#000;
+    }
+    body{ font-size:11px; }
+    .mast-actions, .proposal-bar, form.inputs, .headline, details.mini > summary{ display:none !important; }
+    .workspace{ display:block; max-width:none; margin:0; }
+    .results{ padding:0; gap:.55rem; }
+    .masthead{ padding:0 0 .3rem; border-bottom:0; }
+    .masthead h1{ font-size:1.05rem; }
+    .masthead p{ font-size:.66rem; }
+    .print-only{ display:block; }
+    .quadro{ border:1px solid #999; padding:.5rem .6rem; break-inside:auto; }
+    .quadro > h2{ color:#000; margin-bottom:.4rem; }
+    .tiles, .chart-wrap, canvas{ break-inside:avoid; }
+    canvas{ max-height:190px; }
+    table{ font-size:9.5px; }
+    thead{ display:table-header-group; }
+    tr{ break-inside:avoid; }
+    tr.solo td:first-child{ box-shadow:none; border-left:2px solid #000; }
+    details.mini{ margin-top:.3rem; }
+    details.mini .scroll{ overflow:visible; }
+    .avisos li{ color:#000; }
+  }
 </style>
 
 <header class="masthead">
@@ -183,6 +229,7 @@
     <p>Orçamento paramétrico de obra · R$/m² · NBR 12.721 · BDI TCU 2622/2013</p>
   </div>
   <div class="mast-actions">
+    <button id="btn-print" type="button">Imprimir relatório</button>
     <button id="btn-reset" type="button">Restaurar exemplo</button>
     <button id="btn-theme" type="button" aria-label="Alternar tema claro/escuro">◐ Tema</button>
   </div>
@@ -197,6 +244,9 @@
 
 <main class="workspace">
   <form class="inputs" id="form" autocomplete="off" aria-label="Parâmetros do orçamento">
+    <details class="grp" open><summary><span class="mk">ID</span> Identificação — cliente e obra</summary>
+      <div class="grp-body" id="grp-ident"></div>
+    </details>
     <details class="grp" open><summary><span class="mk">A</span> Áreas e coeficientes</summary>
       <div class="grp-body" id="grp-areas"></div>
     </details>
@@ -221,6 +271,7 @@
   </form>
 
   <section class="results" id="results">
+    <div class="report-head print-only" id="report-head"></div>
     <div class="headline" id="headline">
       <span class="label">Valor global da proposta (PV)</span>
       <div class="big" id="h-pv">—</div>
@@ -260,7 +311,7 @@
     <article class="quadro"><h2><span class="qn">5</span> Curva de desembolso estimada (Curva S)</h2>
       <div class="chart-wrap"><canvas id="curva-canvas" role="img" aria-label="Curva S de desembolso"></canvas></div>
       <div class="chart-cap" id="curva-cap"></div>
-      <details class="mini"><summary>Tabela mensal</summary>
+      <details class="mini"><summary>Cronograma físico-financeiro — desembolso mensal</summary>
         <div class="scroll"><table>
           <thead><tr><th class="num">Mês</th><th class="num">% mês</th><th class="num">% acum.</th><th class="num">Desembolso mês</th><th class="num">Acumulado</th></tr></thead>
           <tbody id="t-curva"></tbody>
@@ -283,6 +334,10 @@
   const FATOR_PADRAO = { baixo_popular:0.85, medio:1.00, alto:1.375, luxo_premium:1.95 };
   const FATOR_SOLO   = { plano_solo_firme:1.00, aclive_declive_medio:1.115, declive_acentuado_solo_mole:1.30 };
   const FATOR_LOG    = { urbano_central:1.00, condominio_fechado:1.05, area_remota:1.15 };
+
+  const L_PADRAO = { baixo_popular:"Baixo / popular", medio:"Médio", alto:"Alto", luxo_premium:"Luxo / premium" };
+  const L_SOLO   = { plano_solo_firme:"Plano / solo firme", aclive_declive_medio:"Aclive / declive médio", declive_acentuado_solo_mole:"Declive acentuado / solo mole" };
+  const L_LOG    = { urbano_central:"Urbano central", condominio_fechado:"Condomínio fechado", area_remota:"Área remota" };
 
   const AREA_FIELDS = [
     { key:"privativa_coberta_padrao",  label:"Privativa coberta padrão" },
@@ -342,12 +397,14 @@
     contingencia:2.00, normalizar:true,
     pesos:{ "01":5.5, "02":9.5, "03":23, "04":7.5, "05":5.5, "06":7.5, "07":7.5, "08":16.5, "09":8, "10":6.5, "11":4.5, "12":2.0 },
     curva_forma:2.2, curva_base:"custo_total",
+    ident:{ cliente:"", obra:"", endereco:"" },
   };
 
   // ---------------------------------------------------------------- format
   const fmtBRL = n => (isFinite(n)?n:0).toLocaleString("pt-BR",{ style:"currency", currency:"BRL" });
   const fmtNum = (n,d=2) => (isFinite(n)?n:0).toLocaleString("pt-BR",{ minimumFractionDigits:d, maximumFractionDigits:d });
   const fmtPct = (fr,d=1) => fmtNum((isFinite(fr)?fr:0)*100,d) + "%";
+  const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
   const sum = o => Object.values(o).reduce((a,b)=>a+(+b||0),0);
   const mapv = (o,f) => Object.fromEntries(Object.entries(o).map(([k,v])=>[k,f(v)]));
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -466,6 +523,11 @@
       + `<div class="inwrap"><input id="${id}" type="number" inputmode="decimal" data-path="${path}" step="${step}"${min!=null?` min="${min}"`:""}>`
       + (unit?`<span class="unit">${unit}</span>`:"") + `</div></div>`;
   }
+  function txtField(path, label, ph){
+    const id = "f_"+path.replace(/\W/g,"_");
+    return `<div class="field"><label for="${id}">${label}</label>`
+      + `<div class="inwrap"><input id="${id}" type="text" data-path="${path}" placeholder="${ph||""}"></div></div>`;
+  }
   function selField(path, label, opts, fkey){
     const id = "f_"+path;
     const o = opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join("");
@@ -475,6 +537,13 @@
   }
 
   function buildInputs(){
+    // ID — identificação (não entra no cálculo; aparece no relatório impresso)
+    $("#grp-ident").innerHTML =
+      txtField("ident.cliente","Cliente","Nome do cliente / contratante")
+      + txtField("ident.obra","Obra / empreendimento","Identificação da obra")
+      + txtField("ident.endereco","Endereço da obra","Rua, nº — bairro — cidade/UF")
+      + `<p class="hint">Aparece no cabeçalho do relatório impresso; não afeta o cálculo.</p>`;
+
     // A — areas + k
     $("#grp-areas").innerHTML = AREA_FIELDS.map(f=>{
       const ia="a_"+f.key, ik="k_"+f.key;
@@ -487,18 +556,14 @@
     // B — base
     $("#grp-base").innerHTML =
       numField("custo_base_m2","Custo base (CUB / SINAPI)","10","R$/m²",0)
-      + selField("padrao","Padrão construtivo",[
-          ["baixo_popular","Baixo / popular"],["medio","Médio"],["alto","Alto"],["luxo_premium","Luxo / premium"]],"padrao")
+      + selField("padrao","Padrão construtivo", Object.entries(L_PADRAO), "padrao")
       + numField("fator_regiao","Fator região","0.01",null,0)
       + `<p class="hint">F padrão multiplica o custo base; fator região é o ajuste regional livre.</p>`;
 
     // C — terreno
     $("#grp-terreno").innerHTML =
-      selField("solo","Topografia / geotecnia",[
-          ["plano_solo_firme","Plano / solo firme"],["aclive_declive_medio","Aclive / declive médio"],
-          ["declive_acentuado_solo_mole","Declive acentuado / solo mole"]],"solo")
-      + selField("logistica","Acessibilidade / logística",[
-          ["urbano_central","Urbano central"],["condominio_fechado","Condomínio fechado"],["area_remota","Área remota"]],"log")
+      selField("solo","Topografia / geotecnia", Object.entries(L_SOLO), "solo")
+      + selField("logistica","Acessibilidade / logística", Object.entries(L_LOG), "log")
       + `<p class="hint">F solo incide só nas etapas 01 e 02. F logística incide no custo indireto.</p>`;
 
     // D — indiretos
@@ -562,7 +627,7 @@
       const raw = localStorage.getItem(LS_KEY); if(!raw) return null;
       const p = JSON.parse(raw); const base = clone(EXAMPLE);
       // shallow-merge known groups so new fields survive
-      ["areas","coef","equipe","canteiro","bdi","pesos"].forEach(g=> Object.assign(base[g], p[g]||{}));
+      ["areas","coef","equipe","canteiro","bdi","pesos","ident"].forEach(g=> Object.assign(base[g], p[g]||{}));
       ["custo_base_m2","padrao","fator_regiao","solo","logistica","prazo_meses","contingencia","normalizar","curva_forma","curva_base"]
         .forEach(k=>{ if(p[k]!=null) base[k]=p[k]; });
       return base;
@@ -677,6 +742,27 @@
     $("#t-avisos").innerHTML = res.avisos.length
       ? res.avisos.map(a=>`<li>${a}</li>`).join("")
       : `<li class="ok">Nenhum aviso — parâmetros dentro das faixas típicas.</li>`;
+
+    // cabeçalho do relatório impresso
+    const idf = s.ident || {};
+    const dash = v => (v!=null && String(v).trim()) ? esc(v) : "—";
+    $("#report-head").innerHTML =
+        `<div class="rh-title"><h2>Relatório de orçamento paramétrico</h2>`
+      + `<span>Emitido em ${new Date().toLocaleDateString("pt-BR")}</span></div>`
+      + `<dl class="rh-grid">`
+      + `<dt>Cliente</dt><dd>${dash(idf.cliente)}</dd>`
+      + `<dt>Obra / empreendimento</dt><dd>${dash(idf.obra)}</dd>`
+      + `<dt>Endereço da obra</dt><dd>${dash(idf.endereco)}</dd>`
+      + `<dt>Padrão construtivo</dt><dd>${esc(L_PADRAO[s.padrao]||s.padrao)} · F ${fmtNum(res.cd.f_padrao,3)}</dd>`
+      + `<dt>Terreno / logística</dt><dd>${esc(L_SOLO[s.solo]||s.solo)} (F ${fmtNum(res.cd.f_solo,3)}) · ${esc(L_LOG[s.logistica]||s.logistica)} (F ${fmtNum(res.ci.f,3)})</dd>`
+      + `<dt>Custo base</dt><dd>${fmtBRL(s.custo_base_m2)}/m² · fator região ${fmtNum(s.fator_regiao,3)}</dd>`
+      + `<dt>Prazo de execução</dt><dd>${Math.max(1,Math.round(s.prazo_meses))} meses</dd>`
+      + `<dt>Área real / equivalente</dt><dd>${fmtNum(res.q.areal,2)} m² / ${fmtNum(res.q.aeq,2)} m²</dd>`
+      + `<dt>BDI aplicado</dt><dd>${fmtPct(res.dem.taxa_bdi,2)} · contingência ${fmtPct(res.dem.taxa_cont,2)}</dd>`
+      + `</dl>`
+      + `<div class="rh-total"><span>Valor global da proposta</span>`
+      + `<b>${fmtBRL(res.dem.pv)}</b>`
+      + `<span>${fmtBRL(res.ind.pv_m2real)}/m² real · ${fmtBRL(res.ind.pv_m2eq)}/m² equivalente</span></div>`;
   }
 
   function animatePV(el, to){
@@ -765,6 +851,18 @@
   $("#btn-reset").addEventListener("click", ()=>{
     state = clone(EXAMPLE); lastPV = null; pushState(state); persist(state); recompute(true);
   });
+
+  // impressão — expande o cronograma físico-financeiro antes de imprimir
+  function prepararImpressao(){
+    document.querySelectorAll("details.mini").forEach(d=>{ d.dataset.prevOpen = d.open ? "1" : "0"; d.open = true; });
+    drawCurva(lastCurva, false);
+  }
+  function restaurarImpressao(){
+    document.querySelectorAll("details.mini").forEach(d=>{ if(d.dataset.prevOpen!=null) d.open = d.dataset.prevOpen === "1"; });
+  }
+  $("#btn-print").addEventListener("click", ()=>{ prepararImpressao(); window.print(); });
+  window.addEventListener("beforeprint", prepararImpressao);
+  window.addEventListener("afterprint", restaurarImpressao);
 
   // theme toggle (light / dark / follow-system)
   const THEME_KEY = "orcamento-tema";
