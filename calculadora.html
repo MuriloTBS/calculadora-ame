@@ -1,0 +1,798 @@
+<title>Calculadora AME</title>
+<meta name="description" content="Calculadora paramétrica de custo de obra em R$/m²: área equivalente NBR 12.721, custo direto por macroetapa, indiretos, contingência e BDI, com curva de desembolso.">
+<style>
+  :root{
+    color-scheme: light;
+    --paper:#edf0f3; --surface:#fafbfc; --sunken:#e4e9ee;
+    --ink:#16202b; --ink-soft:#55636f; --ink-faint:#8a97a2;
+    --line:#d3dbe1; --line-strong:#b6c1ca;
+    --accent:#1c5fa6; --accent-soft:#e6eef7;
+    --warn:#b4531a; --warn-soft:#f6e7db; --good:#2c7355;
+    --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --paper:#0f151b; --surface:#161f28; --sunken:#1e2a35;
+      --ink:#e4eaef; --ink-soft:#9aa8b3; --ink-faint:#6b7a85;
+      --line:#2a3742; --line-strong:#3a4a56;
+      --accent:#5aa0e0; --accent-soft:#17293b;
+      --warn:#e08a4e; --warn-soft:#2e2117; --good:#5fb08a;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --paper:#0f151b; --surface:#161f28; --sunken:#1e2a35;
+    --ink:#e4eaef; --ink-soft:#9aa8b3; --ink-faint:#6b7a85;
+    --line:#2a3742; --line-strong:#3a4a56;
+    --accent:#5aa0e0; --accent-soft:#17293b;
+    --warn:#e08a4e; --warn-soft:#2e2117; --good:#5fb08a;
+  }
+
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3{ margin:0; font-weight:600; text-wrap:balance; }
+  a{ color:var(--accent); }
+  button{ font-family:inherit; }
+
+  .label{ font-size:.68rem; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-faint); font-weight:600; }
+
+  /* ---- masthead ---- */
+  .masthead{ display:flex; justify-content:space-between; align-items:flex-end; gap:1rem;
+    padding:1.4rem clamp(1rem,3vw,2.2rem) 1rem; border-bottom:1px solid var(--line); }
+  .masthead h1{ font-size:clamp(1.15rem,2.3vw,1.5rem); letter-spacing:-.01em; }
+  .masthead p{ margin:.2rem 0 0; font-size:.8rem; color:var(--ink-soft); font-family:var(--mono); }
+  .mast-actions{ display:flex; gap:.5rem; flex-shrink:0; }
+  .mast-actions button{ background:var(--surface); color:var(--ink-soft); border:1px solid var(--line-strong);
+    border-radius:2px; padding:.4rem .7rem; font-size:.75rem; cursor:pointer; letter-spacing:.03em; }
+  .mast-actions button:hover{ color:var(--ink); border-color:var(--accent); }
+
+  /* ---- proposal bar ---- */
+  .proposal-bar{ position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:.4rem 2rem;
+    align-items:baseline; padding:.55rem clamp(1rem,3vw,2.2rem);
+    background:var(--surface); border-bottom:1px solid var(--line-strong); }
+  .proposal-bar > div{ display:flex; flex-direction:column; gap:.1rem; }
+  .pb-value{ font-family:var(--mono); font-size:1.25rem; font-weight:600; color:var(--accent);
+    font-variant-numeric:tabular-nums; }
+  .pb-sub{ font-family:var(--mono); font-size:.9rem; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .pb-flash{ animation:flash .6s ease-out; }
+  @keyframes flash{ from{ color:var(--warn); } to{} }
+
+  /* ---- layout ---- */
+  .workspace{ display:grid; grid-template-columns:minmax(320px,370px) 1fr; gap:0;
+    max-width:1320px; margin:0 auto; }
+  .inputs{ position:sticky; top:53px; align-self:start; max-height:calc(100vh - 53px);
+    overflow:auto; padding:1rem clamp(1rem,2vw,1.3rem) 3rem; border-right:1px solid var(--line);
+    scrollbar-width:thin; }
+  .results{ padding:1.2rem clamp(1rem,3vw,2.2rem) 4rem; display:flex; flex-direction:column; gap:1.5rem; min-width:0; }
+
+  /* ---- input groups ---- */
+  .grp{ border:1px solid var(--line); border-radius:3px; margin-bottom:.7rem; background:var(--surface); }
+  .grp[open]{ border-color:var(--line-strong); }
+  .grp > summary{ list-style:none; cursor:pointer; padding:.6rem .7rem; display:flex; align-items:center; gap:.55rem;
+    font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; font-weight:600; color:var(--ink); }
+  .grp > summary::-webkit-details-marker{ display:none; }
+  .grp > summary::after{ content:"+"; margin-left:auto; font-family:var(--mono); color:var(--ink-faint); font-size:1rem; }
+  .grp[open] > summary::after{ content:"–"; }
+  .grp > summary .mk{ font-family:var(--mono); font-weight:600; color:var(--accent); background:var(--accent-soft);
+    border:1px solid var(--accent); border-radius:2px; width:1.4rem; height:1.4rem; display:grid; place-items:center; font-size:.72rem; }
+  .grp-body{ padding:.3rem .8rem .9rem; display:flex; flex-direction:column; gap:.55rem; border-top:1px solid var(--line); }
+
+  .field{ display:flex; flex-direction:column; gap:.2rem; }
+  .field > label, .arearow > label{ font-size:.78rem; color:var(--ink-soft); }
+  .inwrap{ display:flex; align-items:stretch; border:1px solid var(--line-strong); border-radius:2px; background:var(--paper); overflow:hidden; }
+  .inwrap:focus-within{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .inwrap input, .inwrap select{ border:0; background:transparent; color:var(--ink); font-family:var(--mono);
+    font-size:.9rem; padding:.38rem .5rem; width:100%; text-align:right; font-variant-numeric:tabular-nums; outline:none; }
+  .inwrap select{ text-align:left; cursor:pointer; }
+  .inwrap .unit{ font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); padding:.38rem .5rem; background:var(--sunken);
+    display:flex; align-items:center; white-space:nowrap; }
+  .inwrap .kpre{ font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); padding:.38rem .35rem .38rem .5rem;
+    background:var(--sunken); display:flex; align-items:center; }
+
+  .arearow{ display:grid; grid-template-columns:1fr; gap:.2rem; }
+  .arearow .row2{ display:grid; grid-template-columns:1fr 92px; gap:.4rem; }
+
+  .f-readout{ font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); margin-left:.1rem; }
+  .f-readout b{ color:var(--accent); font-weight:600; }
+  .hint{ margin:.1rem 0 0; font-size:.72rem; color:var(--ink-faint); }
+  .check{ display:flex; align-items:center; gap:.5rem; font-size:.8rem; color:var(--ink-soft); }
+  .check input{ accent-color:var(--accent); width:1rem; height:1rem; }
+  .seg{ display:flex; border:1px solid var(--line-strong); border-radius:2px; overflow:hidden; }
+  .seg label{ flex:1; text-align:center; font-size:.75rem; padding:.4rem; cursor:pointer; color:var(--ink-soft); }
+  .seg label:has(input:checked){ background:var(--accent); color:#fff; }
+  .seg input{ position:absolute; opacity:0; pointer-events:none; }
+  input[type=range]{ width:100%; accent-color:var(--accent); }
+
+  /* ---- results ---- */
+  .headline{ background:var(--surface); border:1px solid var(--line-strong); border-radius:3px; padding:1rem 1.2rem; }
+  .headline .big{ font-family:var(--mono); font-size:clamp(1.7rem,4.4vw,2.5rem); font-weight:600; color:var(--accent);
+    font-variant-numeric:tabular-nums; letter-spacing:-.02em; line-height:1.1; margin-top:.15rem; }
+  .headline .subrow{ display:flex; flex-wrap:wrap; gap:.4rem 1.8rem; margin-top:.7rem; padding-top:.7rem; border-top:1px solid var(--line); }
+  .headline .subrow div{ display:flex; flex-direction:column; gap:.1rem; }
+  .headline .subrow b{ font-family:var(--mono); font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  .quadro{ background:var(--surface); border:1px solid var(--line); border-radius:3px; padding:1rem 1.1rem 1.1rem; }
+  .quadro > h2{ font-size:.78rem; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-soft);
+    display:flex; align-items:center; gap:.5rem; margin-bottom:.8rem; }
+  .quadro > h2 .qn{ font-family:var(--mono); color:var(--accent); }
+
+  table{ width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td{ padding:.42rem .5rem; text-align:left; border-bottom:1px solid var(--line); }
+  thead th{ font-size:.66rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-faint); font-weight:600;
+    background:var(--sunken); border-bottom:1px solid var(--line-strong); }
+  td.num, th.num{ text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  tr.dim td{ color:var(--ink-faint); }
+  tfoot td{ font-weight:600; border-top:1px solid var(--line-strong); border-bottom:0; }
+  .scroll{ overflow-x:auto; }
+
+  tr.solo td:first-child{ box-shadow:inset 3px 0 0 var(--warn); }
+  .chip{ display:inline-block; font-family:var(--mono); font-size:.64rem; color:var(--warn); background:var(--warn-soft);
+    border:1px solid var(--warn); border-radius:2px; padding:0 .3rem; margin-left:.4rem; white-space:nowrap; }
+
+  .bar{ height:7px; background:var(--accent); border-radius:1px; min-width:1px; }
+  .barcell{ width:84px; }
+  .barwrap{ background:var(--sunken); border-radius:1px; }
+
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(146px,1fr)); gap:.55rem; }
+  .tile{ background:var(--sunken); border:1px solid var(--line); border-radius:2px; padding:.6rem .7rem; }
+  .tile .label{ display:block; }
+  .tile .v{ font-family:var(--mono); font-size:1.02rem; font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums; margin-top:.2rem; }
+  .tile.key .v{ color:var(--accent); font-weight:600; }
+  .tile small{ display:block; font-family:var(--mono); font-size:.68rem; color:var(--ink-faint); margin-top:.1rem; }
+
+  .ledger{ margin:0; display:grid; grid-template-columns:1fr auto; gap:.3rem 1rem; font-size:.86rem; }
+  .ledger dt{ color:var(--ink-soft); }
+  .ledger dd{ margin:0; font-family:var(--mono); text-align:right; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .ledger dt.strong, .ledger dd.strong{ font-weight:600; color:var(--ink); }
+  .ledger .sep{ grid-column:1/-1; border-top:1px solid var(--line); margin:.25rem 0; }
+  .ledger .sep.hard{ border-top:1px solid var(--line-strong); }
+  .ledger dt.sub{ padding-left:.9rem; color:var(--ink-faint); font-size:.8rem; }
+  .ledger dd.sub{ color:var(--ink-faint); font-size:.8rem; }
+  .ledger dt.head{ grid-column:1/-1; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); margin-top:.2rem; }
+  .ledger .pv dt, .ledger .pv dd{ font-size:1.05rem; font-weight:600; color:var(--accent); padding-top:.15rem; }
+  .muted{ color:var(--ink-faint); font-family:var(--mono); font-size:.78rem; }
+
+  .chart-wrap{ width:100%; }
+  canvas{ display:block; width:100%; }
+  .chart-cap{ font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); margin-top:.4rem; }
+  details.mini{ margin-top:.7rem; }
+  details.mini summary{ cursor:pointer; font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft); }
+
+  .avisos ul{ margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:.5rem; }
+  .avisos li{ font-size:.82rem; color:var(--ink-soft); padding-left:1.3rem; position:relative; }
+  .avisos li::before{ content:"▲"; position:absolute; left:0; top:.05rem; color:var(--warn); font-size:.7rem; }
+  .avisos li.ok::before{ content:"●"; color:var(--good); }
+
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  @media (max-width:960px){
+    .workspace{ grid-template-columns:1fr; }
+    .inputs{ position:static; max-height:none; border-right:0; border-bottom:1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+
+<header class="masthead">
+  <div>
+    <h1>Calculadora AME</h1>
+    <p>Orçamento paramétrico de obra · R$/m² · NBR 12.721 · BDI TCU 2622/2013</p>
+  </div>
+  <div class="mast-actions">
+    <button id="btn-reset" type="button">Restaurar exemplo</button>
+    <button id="btn-theme" type="button" aria-label="Alternar tema claro/escuro">◐ Tema</button>
+  </div>
+</header>
+
+<div class="proposal-bar" role="status" aria-live="polite">
+  <div><span class="label">Valor global da proposta</span><span id="pb-pv" class="pb-value">—</span></div>
+  <div><span class="label">R$ / m² real</span><span id="pb-m2r" class="pb-sub">—</span></div>
+  <div><span class="label">R$ / m² equivalente</span><span id="pb-m2e" class="pb-sub">—</span></div>
+  <div><span class="label">Taxa de BDI</span><span id="pb-bdi" class="pb-sub">—</span></div>
+</div>
+
+<main class="workspace">
+  <form class="inputs" id="form" autocomplete="off" aria-label="Parâmetros do orçamento">
+    <details class="grp" open><summary><span class="mk">A</span> Áreas e coeficientes</summary>
+      <div class="grp-body" id="grp-areas"></div>
+    </details>
+    <details class="grp" open><summary><span class="mk">B</span> Padrão e referencial base</summary>
+      <div class="grp-body" id="grp-base"></div>
+    </details>
+    <details class="grp" open><summary><span class="mk">C</span> Terreno e logística</summary>
+      <div class="grp-body" id="grp-terreno"></div>
+    </details>
+    <details class="grp"><summary><span class="mk">D</span> Custos indiretos e prazo</summary>
+      <div class="grp-body" id="grp-indiretos"></div>
+    </details>
+    <details class="grp"><summary><span class="mk">E</span> BDI e tributação</summary>
+      <div class="grp-body" id="grp-bdi"></div>
+    </details>
+    <details class="grp"><summary><span class="mk">F</span> Pesos das macroetapas</summary>
+      <div class="grp-body" id="grp-pesos"></div>
+    </details>
+    <details class="grp"><summary><span class="mk">G</span> Curva de desembolso</summary>
+      <div class="grp-body" id="grp-curva"></div>
+    </details>
+  </form>
+
+  <section class="results" id="results">
+    <div class="headline" id="headline">
+      <span class="label">Valor global da proposta (PV)</span>
+      <div class="big" id="h-pv">—</div>
+      <div class="subrow">
+        <div><span class="label">Custo total da obra</span><b id="h-ct">—</b></div>
+        <div><span class="label">Custo direto + indireto</span><b id="h-cdci">—</b></div>
+        <div><span class="label">Área equivalente</span><b id="h-aeq">—</b></div>
+        <div><span class="label">Prazo</span><b id="h-prazo">—</b></div>
+      </div>
+    </div>
+
+    <article class="quadro"><h2><span class="qn">1</span> Quadro de áreas</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Tipologia</th><th class="num">Área real (m²)</th><th class="num">k</th><th class="num">Área equiv. (m²)</th></tr></thead>
+        <tbody id="t-areas"></tbody>
+        <tfoot><tr><td>Total</td><td class="num" id="t-areas-real">—</td><td class="num" id="t-areas-fat">—</td><td class="num" id="t-areas-eq">—</td></tr></tfoot>
+      </table></div>
+      <p class="hint" id="t-areas-note"></p>
+    </article>
+
+    <article class="quadro"><h2><span class="qn">2</span> Indicadores de custo unitário</h2>
+      <div class="tiles" id="t-ind"></div>
+    </article>
+
+    <article class="quadro"><h2><span class="qn">3</span> Detalhamento por macroetapa</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>#</th><th>Macroetapa</th><th class="num">Custo total</th><th class="num">R$/m² real</th><th class="num">% CD</th><th class="barcell"></th></tr></thead>
+        <tbody id="t-macro"></tbody>
+        <tfoot><tr><td></td><td>Custo direto total</td><td class="num" id="t-macro-cd">—</td><td class="num" id="t-macro-m2">—</td><td class="num">100,0%</td><td></td></tr></tfoot>
+      </table></div>
+    </article>
+
+    <article class="quadro"><h2><span class="qn">4</span> Demonstrativo financeiro e BDI</h2>
+      <dl class="ledger" id="t-fin"></dl>
+    </article>
+
+    <article class="quadro"><h2><span class="qn">5</span> Curva de desembolso estimada (Curva S)</h2>
+      <div class="chart-wrap"><canvas id="curva-canvas" role="img" aria-label="Curva S de desembolso"></canvas></div>
+      <div class="chart-cap" id="curva-cap"></div>
+      <details class="mini"><summary>Tabela mensal</summary>
+        <div class="scroll"><table>
+          <thead><tr><th class="num">Mês</th><th class="num">% mês</th><th class="num">% acum.</th><th class="num">Desembolso mês</th><th class="num">Acumulado</th></tr></thead>
+          <tbody id="t-curva"></tbody>
+        </table></div>
+      </details>
+    </article>
+
+    <article class="quadro avisos"><h2>Avisos e premissas</h2>
+      <ul id="t-avisos"></ul>
+    </article>
+  </section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+
+  // ---------------------------------------------------------------- config
+  const FATOR_PADRAO = { baixo_popular:0.85, medio:1.00, alto:1.375, luxo_premium:1.95 };
+  const FATOR_SOLO   = { plano_solo_firme:1.00, aclive_declive_medio:1.115, declive_acentuado_solo_mole:1.30 };
+  const FATOR_LOG    = { urbano_central:1.00, condominio_fechado:1.05, area_remota:1.15 };
+
+  const AREA_FIELDS = [
+    { key:"privativa_coberta_padrao",  label:"Privativa coberta padrão" },
+    { key:"garagem_coberta_subsolo",   label:"Garagem coberta / subsolo" },
+    { key:"garagem_descoberta",        label:"Garagem descoberta" },
+    { key:"varanda_sacada_aberta",     label:"Varandas / sacadas abertas" },
+    { key:"area_tecnica_reservatorio", label:"Áreas técnicas / reservatórios" },
+    { key:"lazer_coberto",             label:"Lazer coberto" },
+    { key:"lazer_descoberto_piscina",  label:"Lazer descoberto / piscinas" },
+  ];
+  const EQUIPE_FIELDS = [
+    { key:"engenheiro_residente", label:"Engenheiro residente" },
+    { key:"mestre_de_obras",      label:"Mestre de obras" },
+    { key:"encarregado",          label:"Encarregado" },
+    { key:"tecnico_seguranca",    label:"Técnico de segurança" },
+  ];
+  const CANTEIRO_FIELDS = [
+    { key:"ligacao_provisoria", label:"Ligação provisória (água/luz)" },
+    { key:"containers",         label:"Locação de containers" },
+    { key:"andaimes",           label:"Andaimes" },
+    { key:"cacambas",           label:"Caçambas / entulho" },
+    { key:"banheiros_quimicos", label:"Banheiros químicos" },
+  ];
+  const BDI_FIELDS = [
+    { key:"ac", label:"Administração central", sig:"AC" },
+    { key:"sg", label:"Seguros + garantias",   sig:"S+G" },
+    { key:"r",  label:"Risco e imprevistos",   sig:"R" },
+    { key:"df", label:"Despesas financeiras",  sig:"DF" },
+    { key:"l",  label:"Lucro",                 sig:"L" },
+    { key:"i",  label:"Tributos",              sig:"I" },
+  ];
+  const MACROS = [
+    { id:"01", label:"Preliminares & terraplenagem",     lo:.04, hi:.07, solo:true },
+    { id:"02", label:"Fundações e infraestrutura",        lo:.07, hi:.12, solo:true },
+    { id:"03", label:"Superestrutura",                    lo:.20, hi:.26 },
+    { id:"04", label:"Alvenarias e vedações",             lo:.06, hi:.09 },
+    { id:"05", label:"Coberturas e impermeabilizações",   lo:.04, hi:.07 },
+    { id:"06", label:"Hidrossanitárias e gás",            lo:.06, hi:.09 },
+    { id:"07", label:"Elétricas e especiais",             lo:.06, hi:.09 },
+    { id:"08", label:"Revestimentos parede e piso",       lo:.14, hi:.19 },
+    { id:"09", label:"Esquadrias, vidros e portas",       lo:.06, hi:.10 },
+    { id:"10", label:"Pinturas e tratamentos",            lo:.05, hi:.08 },
+    { id:"11", label:"Louças, metais e complementares",   lo:.03, hi:.06 },
+    { id:"12", label:"Limpeza pós-obra e entrega",        lo:.01, hi:.03 },
+  ];
+
+  const EXAMPLE = {
+    areas:{ privativa_coberta_padrao:1800, garagem_coberta_subsolo:600, garagem_descoberta:0,
+            varanda_sacada_aberta:180, area_tecnica_reservatorio:60, lazer_coberto:120, lazer_descoberto_piscina:90 },
+    coef:{ privativa_coberta_padrao:1.00, garagem_coberta_subsolo:0.625, garagem_descoberta:0.40,
+           varanda_sacada_aberta:0.55, area_tecnica_reservatorio:0.625, lazer_coberto:0.90, lazer_descoberto_piscina:0.40 },
+    custo_base_m2:2600, padrao:"medio", fator_regiao:1.00, solo:"aclive_declive_medio",
+    logistica:"condominio_fechado", prazo_meses:18,
+    equipe:{ engenheiro_residente:18000, mestre_de_obras:7500, encarregado:4500, tecnico_seguranca:5500 },
+    canteiro:{ ligacao_provisoria:1500, containers:2500, andaimes:3000, cacambas:2000, banheiros_quimicos:1200 },
+    bdi:{ ac:4.25, sg:1.15, r:1.35, df:0.85, l:9.00, i:11.15 },
+    contingencia:2.00, normalizar:true,
+    pesos:{ "01":5.5, "02":9.5, "03":23, "04":7.5, "05":5.5, "06":7.5, "07":7.5, "08":16.5, "09":8, "10":6.5, "11":4.5, "12":2.0 },
+    curva_forma:2.2, curva_base:"custo_total",
+  };
+
+  // ---------------------------------------------------------------- format
+  const fmtBRL = n => (isFinite(n)?n:0).toLocaleString("pt-BR",{ style:"currency", currency:"BRL" });
+  const fmtNum = (n,d=2) => (isFinite(n)?n:0).toLocaleString("pt-BR",{ minimumFractionDigits:d, maximumFractionDigits:d });
+  const fmtPct = (fr,d=1) => fmtNum((isFinite(fr)?fr:0)*100,d) + "%";
+  const sum = o => Object.values(o).reduce((a,b)=>a+(+b||0),0);
+  const mapv = (o,f) => Object.fromEntries(Object.entries(o).map(([k,v])=>[k,f(v)]));
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // ---------------------------------------------------------------- engine
+  function quadroAreas(areas, coef){
+    const real={}, equiv={};
+    AREA_FIELDS.forEach(f=>{ real[f.key]=Math.max(0,+areas[f.key]||0); equiv[f.key]=real[f.key]*Math.max(0,+coef[f.key]||0); });
+    const areal=sum(real), aeq=sum(equiv);
+    return { real, equiv, areal, aeq, fator: areal? aeq/areal : 0 };
+  }
+  function custoDireto(inp, q){
+    const baseAj = Math.max(0.01,inp.custo_base_m2) * inp.fator_padrao * Math.max(0,inp.fator_regiao);
+    const bruto = {}; MACROS.forEach(m=> bruto[m.id]=Math.max(0,+inp.pesos[m.id]||0));
+    const tot = sum(bruto);
+    const pesos = (inp.normalizar && tot>0) ? mapv(bruto,v=>v/tot) : bruto;
+    const aplic = MACROS.map(m=>{ const pb=pesos[m.id]; const f=m.solo? inp.fator_solo : 1; return { m, pb, f, pa:pb*f }; });
+    const somaPA = aplic.reduce((a,x)=>a+x.pa,0);
+    const total = baseAj * q.aeq * somaPA;
+    const itens = aplic.map(a=>{
+      const custo = baseAj * q.aeq * a.pa;
+      return { id:a.m.id, label:a.m.label, solo:!!a.m.solo, f:a.f, pa:a.pa, custo,
+        m2real: q.areal? custo/q.areal : 0, pct: total? custo/total : 0 };
+    });
+    return { total, baseAj, f_padrao:inp.fator_padrao, f_regiao:inp.fator_regiao, f_solo:inp.fator_solo,
+      m2eq: q.aeq? total/q.aeq : 0, m2real: q.areal? total/q.areal : 0, itens };
+  }
+  function custoIndireto(inp){
+    const se=sum(inp.equipe), sc=sum(inp.canteiro), f=Math.max(0,inp.fator_logistica);
+    const mensal=(se+sc)*f;
+    return { se, sc, f, mensal, total: mensal*Math.max(1,inp.prazo_meses) };
+  }
+  function bdiCalc(c){
+    const I=Math.min(0.95,Math.max(0,c.i));
+    const grupo = 1 + Math.max(0,c.ac) + Math.max(0,c.sg) + Math.max(0,c.r);
+    const num = grupo * (1+Math.max(0,c.df)) * (1+Math.max(0,c.l));
+    const taxa = num/(1-I) - 1;
+    return { c:{...c,i:I}, grupo, div:1-I, taxa, mult:1+taxa };
+  }
+  function curvaS(base, prazo, forma, baseName){
+    const N=Math.max(1,Math.round(prazo)), a=Math.min(3,Math.max(0.2,forma));
+    const pts=[]; let prev=0;
+    for(let mes=1; mes<=N; mes++){
+      const t=mes/N;
+      const acc = t<=0?0 : t>=1?1 : Math.pow(t,a)/(Math.pow(t,a)+Math.pow(1-t,a));
+      const per=acc-prev; prev=acc;
+      pts.push({ mes, per, acc, dPer:per*base, dAcc:acc*base });
+    }
+    return { base, baseName, forma:a, pts };
+  }
+  function validar(inp){
+    const av=[];
+    MACROS.forEach(m=>{
+      const p=Math.max(0,+inp.pesos[m.id]||0);
+      if(p < m.lo-1e-9 || p > m.hi+1e-9)
+        av.push(`Peso de "${m.id} ${m.label}" (${fmtPct(p,1)}) fora da faixa típica ${fmtPct(m.lo,0)}–${fmtPct(m.hi,0)}.`);
+    });
+    const sp=sum(inp.pesos);
+    if(!inp.normalizar && Math.abs(sp-1)>0.02)
+      av.push(`Soma dos pesos de macroetapa = ${fmtPct(sp,1)} e normalização desligada; o Custo Direto fica escalado por esse total.`);
+    av.push(`Tributos do BDI = ${fmtPct(Math.min(0.95,Math.max(0,inp.bdi.i)),2)} (ponto médio genérico). Ajuste ao regime real (Simples / Lucro Presumido / RET).`);
+    if(inp.contingencia>0 && inp.bdi.r>0)
+      av.push(`Contingência (${fmtPct(inp.contingencia,2)}) é adicional ao componente Risco do BDI (${fmtPct(inp.bdi.r,2)}); confirme que não há dupla contagem.`);
+    if(inp.fator_solo!==1)
+      av.push(`F_solo = ${fmtNum(inp.fator_solo,3)} aplicado apenas às macroetapas 01 e 02 — sensibilidade de solo.`);
+    return av;
+  }
+  function orcamento(inp){
+    const q=quadroAreas(inp.areas, inp.coef);
+    const cd=custoDireto(inp, q);
+    const ci=custoIndireto(inp);
+    const b=bdiCalc(inp.bdi);
+    const subtotal = cd.total + ci.total;
+    const vcont = subtotal * Math.max(0,inp.contingencia);
+    const ct = subtotal + vcont;
+    const pv = ct * b.mult;
+    const vbdi = pv - ct;
+    const ind = {
+      cd_m2eq: q.aeq? cd.total/q.aeq : 0, ci_m2eq: q.aeq? ci.total/q.aeq : 0,
+      ct_m2real: q.areal? ct/q.areal : 0, ct_m2eq: q.aeq? ct/q.aeq : 0,
+      pv_m2real: q.areal? pv/q.areal : 0, pv_m2eq: q.aeq? pv/q.aeq : 0,
+    };
+    const dem = { cd:cd.total, ci:ci.total, subtotal, taxa_cont:Math.max(0,inp.contingencia), vcont, ct,
+      taxa_bdi:b.taxa, vbdi, pv, lucro_bruto: Math.max(0,inp.bdi.l)*pv,
+      p_cd: pv? cd.total/pv:0, p_ci: pv? ci.total/pv:0, p_cont: pv? vcont/pv:0, p_bdi: pv? vbdi/pv:0 };
+    const cbase = inp.curva_base==="preco_venda" ? pv : ct;
+    const curva = curvaS(cbase, inp.prazo_meses, inp.curva_forma, inp.curva_base);
+    return { q, cd, ci, bdi:b, ind, dem, curva, avisos:validar(inp), subtotal };
+  }
+
+  function toCalcInput(s){
+    return {
+      areas: mapv(s.areas, v=>Math.max(0,+v||0)),
+      coef:  mapv(s.coef,  v=>Math.max(0,+v||0)),
+      custo_base_m2: Math.max(0.01,+s.custo_base_m2||0),
+      fator_padrao: FATOR_PADRAO[s.padrao] ?? 1,
+      fator_regiao: Math.max(0.01,+s.fator_regiao||1),
+      fator_solo: FATOR_SOLO[s.solo] ?? 1,
+      fator_logistica: FATOR_LOG[s.logistica] ?? 1,
+      prazo_meses: Math.max(1,Math.round(+s.prazo_meses||1)),
+      equipe: mapv(s.equipe, v=>Math.max(0,+v||0)),
+      canteiro: mapv(s.canteiro, v=>Math.max(0,+v||0)),
+      bdi: mapv(s.bdi, v=>Math.max(0,(+v||0)/100)),
+      contingencia: Math.max(0,(+s.contingencia||0)/100),
+      normalizar: !!s.normalizar,
+      pesos: mapv(s.pesos, v=>Math.max(0,(+v||0)/100)),
+      curva_forma: +s.curva_forma||2.2,
+      curva_base: s.curva_base||"custo_total",
+    };
+  }
+
+  // ---------------------------------------------------------------- inputs UI
+  function numField(path, label, step, unit, min){
+    const id = "f_"+path.replace(/\W/g,"_");
+    return `<div class="field"><label for="${id}">${label}</label>`
+      + `<div class="inwrap"><input id="${id}" type="number" inputmode="decimal" data-path="${path}" step="${step}"${min!=null?` min="${min}"`:""}>`
+      + (unit?`<span class="unit">${unit}</span>`:"") + `</div></div>`;
+  }
+  function selField(path, label, opts, fkey){
+    const id = "f_"+path;
+    const o = opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join("");
+    return `<div class="field"><label for="${id}">${label}</label>`
+      + `<div class="inwrap"><select id="${id}" data-path="${path}">${o}</select></div>`
+      + (fkey?`<span class="f-readout" id="fr_${fkey}"></span>`:"") + `</div>`;
+  }
+
+  function buildInputs(){
+    // A — areas + k
+    $("#grp-areas").innerHTML = AREA_FIELDS.map(f=>{
+      const ia="a_"+f.key, ik="k_"+f.key;
+      return `<div class="arearow"><label for="${ia}">${f.label}</label><div class="row2">`
+        + `<div class="inwrap"><input id="${ia}" type="number" inputmode="decimal" data-path="areas.${f.key}" step="1" min="0"><span class="unit">m²</span></div>`
+        + `<div class="inwrap"><span class="kpre">k</span><input id="${ik}" type="number" inputmode="decimal" data-path="coef.${f.key}" step="0.005" min="0"></div>`
+        + `</div></div>`;
+    }).join("") + `<p class="hint">Fator k = equivalência NBR 12.721. Defaults no ponto médio de cada faixa.</p>`;
+
+    // B — base
+    $("#grp-base").innerHTML =
+      numField("custo_base_m2","Custo base (CUB / SINAPI)","10","R$/m²",0)
+      + selField("padrao","Padrão construtivo",[
+          ["baixo_popular","Baixo / popular"],["medio","Médio"],["alto","Alto"],["luxo_premium","Luxo / premium"]],"padrao")
+      + numField("fator_regiao","Fator região","0.01",null,0)
+      + `<p class="hint">F padrão multiplica o custo base; fator região é o ajuste regional livre.</p>`;
+
+    // C — terreno
+    $("#grp-terreno").innerHTML =
+      selField("solo","Topografia / geotecnia",[
+          ["plano_solo_firme","Plano / solo firme"],["aclive_declive_medio","Aclive / declive médio"],
+          ["declive_acentuado_solo_mole","Declive acentuado / solo mole"]],"solo")
+      + selField("logistica","Acessibilidade / logística",[
+          ["urbano_central","Urbano central"],["condominio_fechado","Condomínio fechado"],["area_remota","Área remota"]],"log")
+      + `<p class="hint">F solo incide só nas etapas 01 e 02. F logística incide no custo indireto.</p>`;
+
+    // D — indiretos
+    $("#grp-indiretos").innerHTML =
+      numField("prazo_meses","Prazo de execução","1","meses",1)
+      + `<p class="hint" style="margin-top:.2rem;font-weight:600;color:var(--ink-soft)">Equipe técnica (R$/mês)</p>`
+      + EQUIPE_FIELDS.map(f=>numField("equipe."+f.key,f.label,"100","R$",0)).join("")
+      + `<p class="hint" style="margin-top:.2rem;font-weight:600;color:var(--ink-soft)">Infraestrutura de canteiro (R$/mês)</p>`
+      + CANTEIRO_FIELDS.map(f=>numField("canteiro."+f.key,f.label,"100","R$",0)).join("")
+      + `<p class="hint" id="ci-note"></p>`;
+
+    // E — BDI
+    $("#grp-bdi").innerHTML =
+      BDI_FIELDS.map(f=>numField("bdi."+f.key,`${f.label} (${f.sig})`,"0.05","%",0)).join("")
+      + numField("contingencia","Contingência sobre (CD+CI)","0.1","%",0)
+      + `<p class="hint" id="bdi-note"></p>`;
+
+    // F — pesos
+    $("#grp-pesos").innerHTML =
+      `<label class="check"><input type="checkbox" data-path="normalizar"> Normalizar pesos para 100%</label>`
+      + MACROS.map(m=>numField("pesos."+m.id,`${m.id} · ${m.label}`,"0.1","%",0)).join("")
+      + `<p class="hint" id="pesos-note"></p>`;
+
+    // G — curva
+    $("#grp-curva").innerHTML =
+      `<div class="field"><label for="f_forma">Forma da curva <span class="f-readout" id="fr_forma"></span></label>`
+      + `<input id="f_forma" type="range" min="1" max="3" step="0.05" data-path="curva_forma"></div>`
+      + `<div class="field"><span class="label">Base financeira</span><div class="seg">`
+      + `<label><input type="radio" name="curva_base" value="custo_total" data-path="curva_base"> Custo total</label>`
+      + `<label><input type="radio" name="curva_base" value="preco_venda" data-path="curva_base"> Preço de venda</label>`
+      + `</div></div><p class="hint">a = 1 → linear; a &gt; 1 concentra o desembolso no miolo da obra.</p>`;
+  }
+
+  // ---------------------------------------------------------------- state <-> DOM
+  function getPath(o,p){ return p.split(".").reduce((a,k)=>a==null?a:a[k], o); }
+  function setPath(o,p,v){ const ks=p.split("."); const last=ks.pop(); let t=o; ks.forEach(k=>t=t[k]); t[last]=v; }
+
+  function pushState(s){
+    $("#form").querySelectorAll("[data-path]").forEach(inp=>{
+      const v = getPath(s, inp.dataset.path);
+      if(inp.type==="checkbox") inp.checked = !!v;
+      else if(inp.type==="radio") inp.checked = (inp.value === String(v));
+      else inp.value = v;
+    });
+  }
+  function pullState(s){
+    $("#form").querySelectorAll("[data-path]").forEach(inp=>{
+      if(inp.type==="radio"){ if(inp.checked) setPath(s, inp.dataset.path, inp.value); return; }
+      let v;
+      if(inp.type==="checkbox") v = inp.checked;
+      else if(inp.type==="number" || inp.type==="range") v = inp.value===""? 0 : Number(inp.value);
+      else v = inp.value;
+      setPath(s, inp.dataset.path, v);
+    });
+  }
+
+  const LS_KEY = "orcamento-parametrico-v1";
+  function persist(s){ try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){} }
+  function load(){
+    try{
+      const raw = localStorage.getItem(LS_KEY); if(!raw) return null;
+      const p = JSON.parse(raw); const base = clone(EXAMPLE);
+      // shallow-merge known groups so new fields survive
+      ["areas","coef","equipe","canteiro","bdi","pesos"].forEach(g=> Object.assign(base[g], p[g]||{}));
+      ["custo_base_m2","padrao","fator_regiao","solo","logistica","prazo_meses","contingencia","normalizar","curva_forma","curva_base"]
+        .forEach(k=>{ if(p[k]!=null) base[k]=p[k]; });
+      return base;
+    }catch(e){ return null; }
+  }
+
+  // ---------------------------------------------------------------- render
+  let lastPV = null, lastCurva = null;
+
+  function render(res, s){
+    // F readouts
+    $("#fr_padrao").innerHTML = `F&nbsp;<b>${fmtNum(res.cd.f_padrao,3)}</b>`;
+    $("#fr_solo").innerHTML   = `F&nbsp;<b>${fmtNum(res.cd.f_solo,3)}</b>`;
+    $("#fr_log").innerHTML    = `F&nbsp;<b>${fmtNum(res.ci.f,3)}</b>`;
+    $("#fr_forma").textContent = "a = " + fmtNum(res.curva.forma,2);
+
+    // headline + bar
+    animatePV($("#h-pv"), res.dem.pv);
+    $("#h-ct").textContent   = fmtBRL(res.dem.ct);
+    $("#h-cdci").textContent = fmtBRL(res.subtotal);
+    $("#h-aeq").textContent  = fmtNum(res.q.aeq,2) + " m²";
+    $("#h-prazo").textContent = Math.max(1,Math.round(s.prazo_meses)) + " meses";
+    $("#pb-pv").textContent  = fmtBRL(res.dem.pv);
+    $("#pb-m2r").textContent = fmtBRL(res.ind.pv_m2real);
+    $("#pb-m2e").textContent = fmtBRL(res.ind.pv_m2eq);
+    $("#pb-bdi").textContent = fmtPct(res.dem.taxa_bdi,2);
+    if(lastPV!=null && Math.abs(lastPV-res.dem.pv)>0.01){
+      const hl=$("#headline"); hl.classList.remove("pb-flash"); void hl.offsetWidth; hl.classList.add("pb-flash");
+    }
+    lastPV = res.dem.pv;
+
+    // Q1 areas
+    $("#t-areas").innerHTML = AREA_FIELDS.map(f=>{
+      const real=res.q.real[f.key], k=res.q.equiv[f.key] && real? res.q.equiv[f.key]/real : (+s.coef[f.key]||0);
+      const eq=res.q.equiv[f.key];
+      return `<tr class="${real>0?"":"dim"}"><td>${f.label}</td><td class="num">${fmtNum(real,2)}</td>`
+        + `<td class="num">${fmtNum(k,3)}</td><td class="num">${fmtNum(eq,2)}</td></tr>`;
+    }).join("");
+    $("#t-areas-real").textContent = fmtNum(res.q.areal,2);
+    $("#t-areas-eq").textContent   = fmtNum(res.q.aeq,2);
+    $("#t-areas-fat").textContent  = fmtNum(res.q.fator,4);
+    $("#t-areas-note").textContent = `Fator de equivalência médio (A_eq ÷ A_real) = ${fmtNum(res.q.fator,4)}.`;
+
+    // Q2 indicadores
+    const tiles = [
+      ["Custo direto", res.ind.cd_m2eq, "por m² equivalente", false],
+      ["Custo indireto", res.ind.ci_m2eq, "por m² equivalente", false],
+      ["Custo total da obra", res.ind.ct_m2real, "por m² real · " + fmtBRL(res.ind.ct_m2eq) + "/m² eq", false],
+      ["Preço final de venda", res.ind.pv_m2real, "por m² real · " + fmtBRL(res.ind.pv_m2eq) + "/m² eq", true],
+    ];
+    $("#t-ind").innerHTML = tiles.map(([l,v,sub,key])=>
+      `<div class="tile${key?" key":""}"><span class="label">${l}</span><span class="v">${fmtBRL(v)}</span><small>${sub}</small></div>`
+    ).join("");
+
+    // Q3 macroetapas
+    const soloOn = res.cd.f_solo !== 1;
+    $("#t-macro").innerHTML = res.cd.itens.map(it=>{
+      const chip = (soloOn && it.solo) ? `<span class="chip">F_solo ×${fmtNum(res.cd.f_solo,3)}</span>` : "";
+      return `<tr class="${(soloOn && it.solo)?"solo":""}"><td class="num">${it.id}</td>`
+        + `<td>${it.label}${chip}</td>`
+        + `<td class="num">${fmtBRL(it.custo)}</td>`
+        + `<td class="num">${fmtNum(it.m2real,2)}</td>`
+        + `<td class="num">${fmtPct(it.pct,1)}</td>`
+        + `<td class="barcell"><div class="barwrap"><div class="bar" style="width:${Math.max(1,it.pct*100).toFixed(1)}%"></div></div></td></tr>`;
+    }).join("");
+    $("#t-macro-cd").textContent = fmtBRL(res.cd.total);
+    $("#t-macro-m2").textContent = fmtNum(res.cd.m2real,2);
+
+    // Q4 demonstrativo
+    const d=res.dem, b=res.bdi.c;
+    const row = (dt,dd,cls="") => `<dt class="${cls}">${dt}</dt><dd class="${cls}">${dd}</dd>`;
+    $("#t-fin").innerHTML =
+        row("Custo direto (CD)", `${fmtBRL(d.cd)} <span class="muted">${fmtPct(d.p_cd,1)}</span>`)
+      + row("Custo indireto (CI)", `${fmtBRL(d.ci)} <span class="muted">${fmtPct(d.p_ci,1)}</span>`)
+      + row("Subtotal de custos (CD + CI)", fmtBRL(d.subtotal), "strong")
+      + row(`Contingência (${fmtPct(d.taxa_cont,2)})`, `${fmtBRL(d.vcont)} <span class="muted">${fmtPct(d.p_cont,1)}</span>`)
+      + row("Custo total da obra (CT)", fmtBRL(d.ct), "strong")
+      + `<div class="sep"></div>`
+      + `<dt class="head">BDI — memória de cálculo (TCU 2622/2013)</dt>`
+      + row("Administração central (AC)", fmtPct(b.ac,2))
+      + row("Seguros + garantias (S+G)", fmtPct(b.sg,2))
+      + row("Risco e imprevistos (R)", fmtPct(b.r,2))
+      + row("Despesas financeiras (DF)", fmtPct(b.df,2))
+      + row("Lucro (L)", fmtPct(b.l,2))
+      + row("Tributos (I)", fmtPct(b.i,2))
+      + row("[(1+AC+SG+R)·(1+DF)·(1+L) ÷ (1−I)] − 1", fmtPct(d.taxa_bdi,2), "strong")
+      + `<div class="sep"></div>`
+      + row("Valor do BDI (PV − CT)", `${fmtBRL(d.vbdi)} <span class="muted">${fmtPct(d.p_bdi,1)}</span>`)
+      + row("· lucro bruto estimado", fmtBRL(d.lucro_bruto), "sub")
+      + `<div class="sep hard"></div>`
+      + `<div class="pv" style="display:contents">` + row("Valor global da proposta (PV)", fmtBRL(d.pv)) + `</div>`;
+
+    // Q5 curva
+    const cv=res.curva;
+    $("#curva-cap").textContent = `Base: ${cv.baseName==="preco_venda"?"preço de venda":"custo total"} · ${fmtBRL(cv.base)} · forma a = ${fmtNum(cv.forma,2)} · ${cv.pts.length} meses`;
+    $("#t-curva").innerHTML = cv.pts.map(p=>
+      `<tr><td class="num">${p.mes}</td><td class="num">${fmtPct(p.per,1)}</td><td class="num">${fmtPct(p.acc,1)}</td>`
+      + `<td class="num">${fmtBRL(p.dPer)}</td><td class="num">${fmtBRL(p.dAcc)}</td></tr>`
+    ).join("");
+    $("#curva-canvas").setAttribute("aria-label",
+      `Curva S de desembolso, ${cv.pts.length} meses, base ${cv.baseName==="preco_venda"?"preço de venda":"custo total"}. Metade do valor desembolsada por volta do mês ${Math.round(cv.pts.length/2)}.`);
+
+    // notes
+    $("#ci-note").textContent = `Custo mensal indireto: ${fmtBRL(res.ci.mensal)} × ${cv.pts.length} meses = ${fmtBRL(res.ci.total)}.`;
+    $("#bdi-note").textContent = `BDI resultante: ${fmtPct(res.dem.taxa_bdi,2)}. PV = CT × ${fmtNum(res.bdi.mult,4)}.`;
+    const sp = sum(s.pesos);
+    $("#pesos-note").textContent = s.normalizar
+      ? `Soma dos pesos informados: ${fmtNum(sp,1)}% → normalizada para 100%.`
+      : `Soma dos pesos: ${fmtNum(sp,1)}% (sem normalização).`;
+
+    // avisos
+    $("#t-avisos").innerHTML = res.avisos.length
+      ? res.avisos.map(a=>`<li>${a}</li>`).join("")
+      : `<li class="ok">Nenhum aviso — parâmetros dentro das faixas típicas.</li>`;
+  }
+
+  function animatePV(el, to){
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const from = lastPV;
+    if(reduce || from==null || !isFinite(from) || Math.abs(from-to) < 1){ el.textContent = fmtBRL(to); return; }
+    const t0 = performance.now(), dur = 360;
+    (function step(now){
+      const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,3);
+      el.textContent = fmtBRL(from + (to-from)*e);
+      if(p<1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  // ---------------------------------------------------------------- chart
+  function drawCurva(c, animate){
+    lastCurva = c;
+    const canvas = $("#curva-canvas"); if(!canvas || !c) return;
+    const wrap = canvas.parentElement;
+    const cssW = Math.max(240, wrap.clientWidth), cssH = 240;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = cssW*dpr; canvas.height = cssH*dpr; canvas.style.height = cssH+"px";
+    const ctx = canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+    const cs = getComputedStyle(document.documentElement);
+    const col = n => cs.getPropertyValue(n).trim() || "#888";
+    const accent=col("--accent"), line=col("--line"), faint=col("--ink-faint"), soft=col("--accent-soft");
+    const padL=40, padR=14, padT=14, padB=24;
+    const W=cssW-padL-padR, H=cssH-padT-padB, N=c.pts.length;
+    const X = i => padL + (N<=1?0:(i/(N-1))*W);
+    const Y = a => padT + (1-a)*H;
+
+    function frame(prog){
+      ctx.clearRect(0,0,cssW,cssH);
+      ctx.font = '10px "IBM Plex Mono", monospace'; ctx.lineWidth = 1;
+      ctx.strokeStyle = line; ctx.fillStyle = faint; ctx.textBaseline = "middle"; ctx.textAlign = "right";
+      [0,.25,.5,.75,1].forEach(g=>{
+        const y=Y(g); ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke();
+        ctx.fillText(Math.round(g*100)+"%", padL-6, y);
+      });
+      ctx.textAlign="center"; ctx.textBaseline="top";
+      const marks = N<=6 ? c.pts.map((_,i)=>i) : [0, Math.floor((N-1)/2), N-1];
+      marks.forEach(i=> ctx.fillText(String(c.pts[i].mes), X(i), cssH-padB+6));
+
+      const limit = (N-1)*prog;
+      const pts=[];
+      for(let i=0;i<N;i++) if(i<=limit) pts.push([X(i), Y(c.pts[i].acc), i]);
+      if(prog<1){
+        const i0=Math.floor(limit), i1=Math.min(N-1,i0+1), fr=limit-i0;
+        const a=c.pts[i0].acc + (c.pts[i1].acc-c.pts[i0].acc)*fr;
+        pts.push([X(i0+fr), Y(a)]);
+      }
+      if(pts.length>1){
+        ctx.beginPath(); ctx.moveTo(pts[0][0], Y(0));
+        pts.forEach(p=>ctx.lineTo(p[0],p[1]));
+        ctx.lineTo(pts[pts.length-1][0], Y(0)); ctx.closePath();
+        ctx.fillStyle = soft; ctx.fill();
+        ctx.beginPath(); pts.forEach((p,idx)=> idx?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+        ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = accent;
+        pts.forEach(p=>{ if(p[2]===undefined) return; ctx.beginPath(); ctx.arc(p[0],p[1], p[2]===N-1?4:2.1, 0, 6.29); ctx.fill(); });
+      }
+    }
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(animate && !reduce){
+      const t0=performance.now(), dur=700;
+      (function loop(now){ const p=Math.min(1,(now-t0)/dur); frame(1-Math.pow(1-p,3)); if(p<1) requestAnimationFrame(loop); })(t0);
+    } else frame(1);
+  }
+
+  // ---------------------------------------------------------------- wiring
+  let state = load() || clone(EXAMPLE);
+
+  function recompute(animateCurva){
+    const res = orcamento(toCalcInput(state));
+    render(res, state);
+    drawCurva(res.curva, !!animateCurva);
+  }
+
+  buildInputs();
+  pushState(state);
+  recompute(true);
+
+  $("#form").addEventListener("input", ()=>{ pullState(state); persist(state); recompute(false); });
+  $("#form").addEventListener("change", ()=>{ pullState(state); persist(state); recompute(false); });
+
+  $("#btn-reset").addEventListener("click", ()=>{
+    state = clone(EXAMPLE); lastPV = null; pushState(state); persist(state); recompute(true);
+  });
+
+  // theme toggle (light / dark / follow-system)
+  const THEME_KEY = "orcamento-tema";
+  function applyTheme(t){
+    if(t==="light"||t==="dark") document.documentElement.setAttribute("data-theme", t);
+    else document.documentElement.removeAttribute("data-theme");
+  }
+  try{ const saved = localStorage.getItem(THEME_KEY); if(saved) applyTheme(saved); }catch(e){}
+  $("#btn-theme").addEventListener("click", ()=>{
+    const cur = document.documentElement.getAttribute("data-theme");
+    const next = cur==="dark" ? "light" : cur==="light" ? "" : "dark";
+    applyTheme(next);
+    try{ next ? localStorage.setItem(THEME_KEY,next) : localStorage.removeItem(THEME_KEY); }catch(e){}
+    drawCurva(lastCurva, false);
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", ()=> drawCurva(lastCurva,false));
+
+  if(window.ResizeObserver){
+    new ResizeObserver(()=> drawCurva(lastCurva,false)).observe($("#curva-canvas").parentElement);
+  } else {
+    window.addEventListener("resize", ()=> drawCurva(lastCurva,false));
+  }
+
+  // persist open/closed groups
+  document.querySelectorAll(".grp").forEach((g,i)=>{
+    const k = "orc-grp-"+i;
+    try{ const v=localStorage.getItem(k); if(v==="1") g.open; if(v==="0") g.open=false; if(v==="1") g.open=true; }catch(e){}
+    g.addEventListener("toggle", ()=>{ try{ localStorage.setItem(k, g.open?"1":"0"); }catch(e){} });
+  });
+})();
+</script>
