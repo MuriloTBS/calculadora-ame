@@ -16,7 +16,9 @@ Sem dependências de runtime — só a biblioteca padrão. `pytest` apenas para 
 
 ## Calculadora web
 
-`calculadora.html` — página única, sem build, com a mesma lógica do motor Python
+**Online:** https://murilotbs.github.io/calculadora-ame/
+
+`index.html` — página única, sem build, com a mesma lógica do motor Python
 portada para JavaScript (conferida número a número). Abra no navegador ou publique
 como página estática. Todos os parâmetros editáveis, 5 quadros de saída, Curva S e
 tema claro/escuro.
