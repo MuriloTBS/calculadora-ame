@@ -16,3 +16,6 @@ venv/
 *.swp
 .idea/
 .vscode/
+
+# relatórios exportados / PDFs locais
+*.pdf
