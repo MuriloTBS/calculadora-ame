@@ -3,7 +3,8 @@
 Calculadora paramétrica de custo de obra por m² — da fundação ao acabamento.
 Motor de cálculo em Python + calculadora web, cobrindo área equivalente
 (NBR 12.721), custo direto por macroetapa, custo indireto por prazo, contingência
-e BDI (fórmula TCU, Acórdão 2622/2013).
+e BDI (fórmula TCU, Acórdão 2622/2013). Custo base referenciado no
+**CUB-RJ 2026** (SindusCon-Rio).
 
 ## Instalação
 
@@ -23,6 +24,9 @@ portada para JavaScript (conferida número a número). Abra no navegador ou publ
 como página estática.
 
 - Campos de identificação: cliente, obra / empreendimento e endereço da obra
+- Referência **CUB-RJ 2026** (R8-N, SindusCon-Rio): seletor com a série mensal
+  jan–ago/2026; o campo de custo base aceita valor livre para outros
+  projetos-padrão
 - Todos os parâmetros de cálculo editáveis, 5 quadros de saída, Curva S, tema claro/escuro
 - **Imprimir relatório** (`Ctrl/Cmd+P` ou o botão): gera folha com cabeçalho
   identificado, quadros e o cronograma físico-financeiro de desembolso mês a mês
@@ -43,7 +47,7 @@ entrada = EntradaProjeto(
         garagem_coberta_subsolo=600,
         varanda_sacada_aberta=180,
     ),
-    custo_base_m2=2_600.0,                     # CUB-referência R$/m²
+    custo_base_m2=2_471.58,                    # CUB-RJ R8-N ago/2026 (SindusCon-Rio)
     padrao_construtivo="medio",               # baixo_popular | medio | alto | luxo_premium
     solo_topografia="aclive_declive_medio",   # plano_solo_firme | aclive_declive_medio | declive_acentuado_solo_mole
     logistica="condominio_fechado",           # urbano_central | condominio_fechado | area_remota
@@ -139,12 +143,37 @@ EntradaProjeto(
 
 `formatar_relatorio(resultado)` devolve tudo isso como texto tabelado.
 
+## Referência de custo base — CUB-RJ 2026
+
+`custo_base_m2` usa como referência o **CUB-RJ**, projeto-padrão **R8-N**
+(residencial multifamiliar, padrão normal), com desoneração — série mensal do
+SindusCon-Rio:
+
+| Mês (2026) | R$/m² | Mês (2026) | R$/m² |
+|-----------|-------|-----------|-------|
+| jan | 2.386,79 | mai | 2.456,44 |
+| fev | 2.390,16 | jun | 2.463,94 |
+| mar | 2.392,77 | jul | 2.469,66 |
+| abr | 2.395,57 | **ago** | **2.471,58** |
+
+```python
+from orcamento_obra import CUB_RJ_R8N_2026, CUB_RJ_R8N_ATUAL
+
+CUB_RJ_R8N_ATUAL                 # 2471.58  (ago/2026)
+CUB_RJ_R8N_2026["2026-05"]       # 2456.44
+```
+
+Para outros projetos-padrão (R1, R16, PP-4, CSL, CAL, GI) consulte o boletim
+vigente do SindusCon-Rio e informe o valor diretamente em `custo_base_m2`.
+Fonte: SindusCon-Rio — <https://www.sinduscon-rio.com.br/wp/servicos/custo-unitario-basico/>
+
 ## Premissas e limites
 
 - Custos mensais de equipe/canteiro são **referências de mercado** — calibre com
   a sua composição real antes de usar em proposta.
-- `custo_base_m2` deve refletir o padrão e a data-base escolhidos (CUB estadual
-  ou SINAPI desonerado / não-desonerado).
+- `custo_base_m2` referencia o CUB-RJ 2026 (R8-N); é um índice **mensal** —
+  confirme o mês vigente e o projeto-padrão no boletim do SindusCon-Rio. Ajuste
+  também para SINAPI desonerado / não-desonerado quando for o caso.
 - Tributos do BDI no default genérico (ponto médio). Defina conforme Simples,
   Lucro Presumido ou RET.
 - Orçamento **paramétrico** para viabilidade e proposta preliminar; não

@@ -19,6 +19,8 @@ from .areas import QuadroAreas, calcular_quadro_areas
 from .bdi import ResultadoBDI, calcular_bdi
 from .coeficientes import (
     CONTINGENCIA_PADRAO,
+    CUB_RJ_R8N_2026,
+    CUB_RJ_R8N_ATUAL,
     FATOR_LOGISTICA,
     FATOR_PADRAO_CONSTRUTIVO,
     FATOR_SOLO_TOPOGRAFIA,
@@ -72,4 +74,6 @@ __all__ = [
     "FATOR_SOLO_TOPOGRAFIA",
     "FATOR_LOGISTICA",
     "CONTINGENCIA_PADRAO",
+    "CUB_RJ_R8N_2026",
+    "CUB_RJ_R8N_ATUAL",
 ]

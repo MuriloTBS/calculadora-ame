@@ -169,3 +169,25 @@ class ComponentesBDI:
 # Reserva física/quantitativa aplicada sobre (CD + CI), distinta do componente
 # "Risco e Imprevistos" do BDI. Zerar se o risco já estiver todo no BDI.
 CONTINGENCIA_PADRAO: float = 0.02
+
+
+# --------------------------------------------------------------------------- #
+# Referência de custo base — CUB-RJ 2026
+# --------------------------------------------------------------------------- #
+# Projeto-padrão R8-N (residencial multifamiliar, padrão normal), com desoneração.
+# Série mensal publicada pelo SindusCon-Rio; use como valor de `custo_base_m2`.
+# Para outros projetos-padrão (R1, R16, PP-4, CSL, CAL, GI) consulte o boletim
+# vigente e informe o valor diretamente.
+CUB_RJ_R8N_2026: Mapping[str, float] = {
+    "2026-01": 2386.79,
+    "2026-02": 2390.16,
+    "2026-03": 2392.77,
+    "2026-04": 2395.57,
+    "2026-05": 2456.44,
+    "2026-06": 2463.94,
+    "2026-07": 2469.66,
+    "2026-08": 2471.58,
+}
+
+# Valor mais recente da série acima (mês de referência: agosto/2026).
+CUB_RJ_R8N_ATUAL: float = CUB_RJ_R8N_2026["2026-08"]

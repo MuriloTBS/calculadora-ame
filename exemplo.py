@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from orcamento_obra import (
+    CUB_RJ_R8N_ATUAL,
     AreasProjeto,
     ComponentesBDI,
     EntradaProjeto,
@@ -26,7 +27,7 @@ def main() -> None:
             lazer_coberto=120.0,
             lazer_descoberto_piscina=90.0,
         ),
-        custo_base_m2=2_600.0,             # CUB-referência R$/m²
+        custo_base_m2=CUB_RJ_R8N_ATUAL,   # CUB-RJ R8-N ago/2026 (SindusCon-Rio)
         padrao_construtivo="medio",
         solo_topografia="aclive_declive_medio",
         logistica="condominio_fechado",

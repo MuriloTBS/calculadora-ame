@@ -339,6 +339,13 @@
   const L_SOLO   = { plano_solo_firme:"Plano / solo firme", aclive_declive_medio:"Aclive / declive médio", declive_acentuado_solo_mole:"Declive acentuado / solo mole" };
   const L_LOG    = { urbano_central:"Urbano central", condominio_fechado:"Condomínio fechado", area_remota:"Área remota" };
 
+  // CUB-RJ 2026 — projeto-padrão R8-N (residencial multifamiliar, padrão normal),
+  // com desoneração. Série mensal publicada pelo SindusCon-Rio.
+  const CUB_RJ_R8N_2026 = [
+    ["jan/2026", 2386.79], ["fev/2026", 2390.16], ["mar/2026", 2392.77], ["abr/2026", 2395.57],
+    ["mai/2026", 2456.44], ["jun/2026", 2463.94], ["jul/2026", 2469.66], ["ago/2026", 2471.58],
+  ];
+
   const AREA_FIELDS = [
     { key:"privativa_coberta_padrao",  label:"Privativa coberta padrão" },
     { key:"garagem_coberta_subsolo",   label:"Garagem coberta / subsolo" },
@@ -389,7 +396,7 @@
             varanda_sacada_aberta:180, area_tecnica_reservatorio:60, lazer_coberto:120, lazer_descoberto_piscina:90 },
     coef:{ privativa_coberta_padrao:1.00, garagem_coberta_subsolo:0.625, garagem_descoberta:0.40,
            varanda_sacada_aberta:0.55, area_tecnica_reservatorio:0.625, lazer_coberto:0.90, lazer_descoberto_piscina:0.40 },
-    custo_base_m2:2600, padrao:"medio", fator_regiao:1.00, solo:"aclive_declive_medio",
+    custo_base_m2:2471.58, padrao:"medio", fator_regiao:1.00, solo:"aclive_declive_medio",
     logistica:"condominio_fechado", prazo_meses:18,
     equipe:{ engenheiro_residente:18000, mestre_de_obras:7500, encarregado:4500, tecnico_seguranca:5500 },
     canteiro:{ ligacao_provisoria:1500, containers:2500, andaimes:3000, cacambas:2000, banheiros_quimicos:1200 },
@@ -405,6 +412,10 @@
   const fmtNum = (n,d=2) => (isFinite(n)?n:0).toLocaleString("pt-BR",{ minimumFractionDigits:d, maximumFractionDigits:d });
   const fmtPct = (fr,d=1) => fmtNum((isFinite(fr)?fr:0)*100,d) + "%";
   const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+  function cubRefLabel(v){
+    const m = CUB_RJ_R8N_2026.find(([,x]) => Math.abs(x - v) < 0.005);
+    return m ? `CUB-RJ R8-N ${m[0]}` : "valor personalizado";
+  }
   const sum = o => Object.values(o).reduce((a,b)=>a+(+b||0),0);
   const mapv = (o,f) => Object.fromEntries(Object.entries(o).map(([k,v])=>[k,f(v)]));
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -554,11 +565,15 @@
     }).join("") + `<p class="hint">Fator k = equivalência NBR 12.721. Defaults no ponto médio de cada faixa.</p>`;
 
     // B — base
+    const cubOpts = CUB_RJ_R8N_2026.slice().reverse()
+      .map(([m,v])=>`<option value="${v}">${m} — ${fmtBRL(v)}/m²</option>`).join("");
     $("#grp-base").innerHTML =
-      numField("custo_base_m2","Custo base (CUB / SINAPI)","10","R$/m²",0)
+      `<div class="field"><label for="cub-ref">Referência CUB-RJ 2026 · R8-N (SindusCon-Rio)</label>`
+      + `<div class="inwrap"><select id="cub-ref">${cubOpts}<option value="">Personalizado</option></select></div></div>`
+      + numField("custo_base_m2","Custo base (R$/m²)","1","R$/m²",0)
       + selField("padrao","Padrão construtivo", Object.entries(L_PADRAO), "padrao")
       + numField("fator_regiao","Fator região","0.01",null,0)
-      + `<p class="hint">F padrão multiplica o custo base; fator região é o ajuste regional livre.</p>`;
+      + `<p class="hint">Base = CUB-RJ 2026, projeto-padrão R8-N (SindusCon-Rio). Para outros projetos-padrão (R1, R16, PP-4, CSL, CAL, GI) digite o valor do boletim vigente. F padrão multiplica o custo base; fator região é o ajuste regional livre.</p>`;
 
     // C — terreno
     $("#grp-terreno").innerHTML =
@@ -638,6 +653,10 @@
   let lastPV = null, lastCurva = null;
 
   function render(res, s){
+    // CUB-RJ select reflects the current base cost
+    const cubM = CUB_RJ_R8N_2026.find(([,v]) => Math.abs(v - s.custo_base_m2) < 0.005);
+    const cubSel = $("#cub-ref"); if(cubSel) cubSel.value = cubM ? String(cubM[1]) : "";
+
     // F readouts
     $("#fr_padrao").innerHTML = `F&nbsp;<b>${fmtNum(res.cd.f_padrao,3)}</b>`;
     $("#fr_solo").innerHTML   = `F&nbsp;<b>${fmtNum(res.cd.f_solo,3)}</b>`;
@@ -755,7 +774,7 @@
       + `<dt>Endereço da obra</dt><dd>${dash(idf.endereco)}</dd>`
       + `<dt>Padrão construtivo</dt><dd>${esc(L_PADRAO[s.padrao]||s.padrao)} · F ${fmtNum(res.cd.f_padrao,3)}</dd>`
       + `<dt>Terreno / logística</dt><dd>${esc(L_SOLO[s.solo]||s.solo)} (F ${fmtNum(res.cd.f_solo,3)}) · ${esc(L_LOG[s.logistica]||s.logistica)} (F ${fmtNum(res.ci.f,3)})</dd>`
-      + `<dt>Custo base</dt><dd>${fmtBRL(s.custo_base_m2)}/m² · fator região ${fmtNum(s.fator_regiao,3)}</dd>`
+      + `<dt>Custo base</dt><dd>${fmtBRL(s.custo_base_m2)}/m² · ${cubRefLabel(s.custo_base_m2)} · fator região ${fmtNum(s.fator_regiao,3)}</dd>`
       + `<dt>Prazo de execução</dt><dd>${Math.max(1,Math.round(s.prazo_meses))} meses</dd>`
       + `<dt>Área real / equivalente</dt><dd>${fmtNum(res.q.areal,2)} m² / ${fmtNum(res.q.aeq,2)} m²</dd>`
       + `<dt>BDI aplicado</dt><dd>${fmtPct(res.dem.taxa_bdi,2)} · contingência ${fmtPct(res.dem.taxa_cont,2)}</dd>`
@@ -847,6 +866,11 @@
 
   $("#form").addEventListener("input", ()=>{ pullState(state); persist(state); recompute(false); });
   $("#form").addEventListener("change", ()=>{ pullState(state); persist(state); recompute(false); });
+
+  // preset CUB-RJ 2026 → preenche o custo base (o listener de "change" do form conclui)
+  $("#cub-ref").addEventListener("change", e=>{
+    if(e.target.value) $("#f_custo_base_m2").value = e.target.value;
+  });
 
   $("#btn-reset").addEventListener("click", ()=>{
     state = clone(EXAMPLE); lastPV = null; pushState(state); persist(state); recompute(true);
